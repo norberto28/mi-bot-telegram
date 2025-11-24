@@ -13,7 +13,7 @@ import PIL.Image
 
 # 1. Pega aquí TU ID PERSONAL (el que te dio @userinfobot)
 # Si no lo pones, nadie podrá mandar anuncios.
-ADMIN_ID = 1393624932 
+ADMIN_ID = 1393624932
 
 # 2. Lista de grupos donde se enviarán los anuncios.
 # Ejemplo: GRUPOS_DESTINO = [-10012345678, -10098765432]
@@ -39,8 +39,8 @@ def keep_alive():
 # ==========================================
 # 2. CONFIGURACIÓN DE CREDENCIALES 🔑
 # ==========================================
-TELEGRAM_TOKEN = os.environ.get('8356125312:AAEqgCxe53DBnopnjtQXoiAC4IjUxUikrCA')
-GOOGLE_API_KEY = os.environ.get('AIzaSyDKaMXJJwRn7hnj2DGlBGHp9rqKSYjTxKI')
+TELEGRAM_TOKEN = os.environ.get('TELEGRAM_TOKEN')
+GOOGLE_API_KEY = os.environ.get('GOOGLE_API_KEY')
 
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',

@@ -13,7 +13,7 @@ ADMIN_ID = 1393624932  # <--- ¡CAMBIA ESTO POR TU NÚMERO!
 
 # 2. Aquí pondremos los grupos más tarde. Déjalo vacío por ahora.
 GRUPOS_DESTINO = [] 
-# Ejemplo futuro: GRUPOS_DESTINO = [-10012345678, -10087654321]
+# Ejemplo futuro: GRUPOS_DESTINO = [-4947151665]
 
 # --- KEEP ALIVE (Para Render) ---
 app = Flask('')
@@ -108,3 +108,4 @@ if __name__ == '__main__':
         app_bot.add_handler(MessageHandler(filters.PHOTO, recibir_imagen))
         
         app_bot.run_polling()
+

@@ -1,5 +1,6 @@
 import logging
 import os
+import PIL.Image
 from telegram import Update
 from telegram.ext import ApplicationBuilder, ContextTypes, MessageHandler, filters
 import google.generativeai as genai
@@ -91,6 +92,35 @@ async def chat_con_ia(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await context.bot.send_message(chat_id=usuario_id, text="Ups, tuve un error. He reiniciado nuestra conversación.")
         print(e)
 
+async def recibir_imagen(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # Avisamos que J.A.R.V.I.S. está analizando
+    await context.bot.send_chat_action(chat_id=update.effective_chat.id, action='typing')
+    
+    usuario_id = update.effective_chat.id
+    
+    # 1. Descargamos la foto que enviaste
+    foto_archivo = await update.message.photo[-1].get_file()
+    await foto_archivo.download_to_drive("imagen_temp.jpg")
+    
+    try:
+        # 2. Abrimos la imagen para la IA
+        img = PIL.Image.open("imagen_temp.jpg")
+        
+        # 3. Verificamos si ya hay sesión, si no, iniciamos una
+        if usuario_id not in chats_activos:
+             chats_activos[usuario_id] = model.start_chat(history=[])
+        
+        # 4. Enviamos la imagen a Gemini
+        chat_sesion = chats_activos[usuario_id]
+        response = chat_sesion.send_message(["Señor, analice esta imagen visual y dígame qué detecta.", img])
+        
+        # 5. Respondemos en Telegram
+        await context.bot.send_message(chat_id=update.effective_chat.id, text=response.text)
+        
+    except Exception as e:
+        await context.bot.send_message(chat_id=update.effective_chat.id, text="Error en los sensores visuales, señor.")
+        print(e)
+        
 if __name__ == '__main__':
     keep_alive() # Encender servidor web
     
@@ -108,7 +138,10 @@ if __name__ == '__main__':
 
         application.add_handler(handler_ia)
         print("Bot con Memoria iniciado...")
+        # Manejador para FOTOS
+    application.add_handler(MessageHandler(filters.PHOTO, recibir_imagen))
         application.run_polling()
     else:
         print("¡ERROR! No encontré el Token de Telegram.")
+
 

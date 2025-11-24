@@ -1,18 +1,18 @@
 import logging
 import os
-import PIL.Image
 from telegram import Update
 from telegram.ext import ApplicationBuilder, ContextTypes, MessageHandler, filters
 import google.generativeai as genai
 from flask import Flask
 from threading import Thread
+import PIL.Image # <--- IMPORTANTE: Esto usa la librería Pillow que acabamos de agregar
 
-# --- 1. MANTENER VIVO EL BOT (Keep Alive) ---
+# --- 1. MANTENER VIVO EL BOT ---
 app = Flask('')
 
 @app.route('/')
 def home():
-    return "¡Hola! Soy el Bot con Memoria y estoy vivo."
+    return "J.A.R.V.I.S. Online"
 
 def run():
     app.run(host='0.0.0.0', port=8080)
@@ -25,123 +25,86 @@ def keep_alive():
 TELEGRAM_TOKEN = os.environ.get('TELEGRAM_TOKEN')
 GOOGLE_API_KEY = os.environ.get('GOOGLE_API_KEY')
 
-logging.basicConfig(
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    level=logging.INFO
-)
+logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 
-# Configuración de Gemini
 try:
     if GOOGLE_API_KEY:
         genai.configure(api_key=GOOGLE_API_KEY)
         model = genai.GenerativeModel('gemini-2.0-flash')
     else:
-        print("¡ADVERTENCIA! No encontré la clave de Google.")
+        print("¡ADVERTENCIA! Falta la API Key.")
 except Exception as e:
-    print(f"Error configurando Gemini: {e}")
+    print(f"Error Gemini: {e}")
 
-# --- 3. DICCIONARIO PARA GUARDAR MEMORIA DE CADA USUARIO ---
-# Aquí guardaremos el historial de cada persona por separado
 chats_activos = {}
 
+# --- 3. CEREBRO DE JARVIS (TEXTO) ---
 async def chat_con_ia(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not GOOGLE_API_KEY:
-        await context.bot.send_message(chat_id=update.effective_chat.id, text="Me falta mi cerebro (API Key).")
-        return
-
-    # Avisamos que el bot está "escribiendo..."
-    await context.bot.send_chat_action(chat_id=update.effective_chat.id, action='typing')
-    
-    # Datos del usuario
     usuario_id = update.effective_chat.id
     mensaje_usuario = update.message.text
     nombre_usuario = update.effective_user.first_name
+    
+    await context.bot.send_chat_action(chat_id=usuario_id, action='typing')
 
     try:
-        # Verificamos si ya conocemos a este usuario
         if usuario_id not in chats_activos:
-            # Si es nuevo, iniciamos una nueva sesión de chat con historial vacío
-            # Verificamos si ya conocemos a este usuario
-        if usuario_id not in chats_activos:
-            # INICIO DEL PROTOCOLO JARVIS 🤖
-            # Le damos la instrucción precisa de cómo comportarse
             prompt_inicial = (
-                f"Eres J.A.R.V.I.S., una inteligencia artificial avanzada. "
-                f"Tu usuario actual es {nombre_usuario}, pero debes dirigirte a él siempre como 'Señor' (o 'Señora' si te lo pide). "
-                "Tu tono es extremadamente educado, formal, breve, eficiente y con un toque sutil de humor británico. "
-                "No uses emojis excesivamente, prefiere un lenguaje técnico y elegante. "
-                "Estás aquí para asistir en programación, gestión de datos y cualquier tarea que requiera el Señor."
+                f"Eres J.A.R.V.I.S., una IA avanzada. Tu usuario es {nombre_usuario} (Señor/a). "
+                "Tu tono es servicial, técnico, elegante y con humor británico sutil. "
+                "Eres un experto en tecnología y análisis."
             )
-            
             chats_activos[usuario_id] = model.start_chat(history=[
                 {"role": "user", "parts": prompt_inicial},
-                {"role": "model", "parts": f"A sus órdenes, Señor. Sistemas en línea y listos para asistirle. ¿Cuál es la primera tarea?"}
+                {"role": "model", "parts": "A sus órdenes, Señor. Sistemas listos."}
             ])
-        # Recuperamos la sesión de este usuario específico
+        
         chat_sesion = chats_activos[usuario_id]
-        
-        # Enviamos el mensaje al chat con memoria
         response = chat_sesion.send_message(mensaje_usuario)
-        
-        # Respondemos en Telegram
         await context.bot.send_message(chat_id=usuario_id, text=response.text)
 
     except Exception as e:
-        # Si la memoria falla o hay error, reseteamos el chat
         chats_activos[usuario_id] = model.start_chat(history=[])
-        await context.bot.send_message(chat_id=usuario_id, text="Ups, tuve un error. He reiniciado nuestra conversación.")
-        print(e)
+        await context.bot.send_message(chat_id=usuario_id, text="Reiniciando sistemas de memoria, señor.")
 
+# --- 4. OJOS DE JARVIS (IMÁGENES) ---
 async def recibir_imagen(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # Avisamos que J.A.R.V.I.S. está analizando
-    await context.bot.send_chat_action(chat_id=update.effective_chat.id, action='typing')
-    
     usuario_id = update.effective_chat.id
-    
-    # 1. Descargamos la foto que enviaste
-    foto_archivo = await update.message.photo[-1].get_file()
-    await foto_archivo.download_to_drive("imagen_temp.jpg")
+    await context.bot.send_chat_action(chat_id=usuario_id, action='typing')
     
     try:
-        # 2. Abrimos la imagen para la IA
+        # Descargar foto
+        foto_archivo = await update.message.photo[-1].get_file()
+        await foto_archivo.download_to_drive("imagen_temp.jpg")
+        
+        # Texto que acompaña la foto (si hay)
+        texto_usuario = update.message.caption if update.message.caption else "Analice esta imagen visual y descríbala detalladamente."
+
+        # Cargar imagen con Pillow
         img = PIL.Image.open("imagen_temp.jpg")
         
-        # 3. Verificamos si ya hay sesión, si no, iniciamos una
         if usuario_id not in chats_activos:
              chats_activos[usuario_id] = model.start_chat(history=[])
         
-        # 4. Enviamos la imagen a Gemini
+        # Enviar a Gemini (Imagen + Texto)
         chat_sesion = chats_activos[usuario_id]
-        response = chat_sesion.send_message(["Señor, analice esta imagen visual y dígame qué detecta.", img])
+        response = chat_sesion.send_message([texto_usuario, img])
         
-        # 5. Respondemos en Telegram
-        await context.bot.send_message(chat_id=update.effective_chat.id, text=response.text)
+        await context.bot.send_message(chat_id=usuario_id, text=response.text)
         
     except Exception as e:
-        await context.bot.send_message(chat_id=update.effective_chat.id, text="Error en los sensores visuales, señor.")
-        print(e)
-        
+        await context.bot.send_message(chat_id=usuario_id, text="Error en los sensores visuales.")
+        print(f"Error imagen: {e}")
+
 if __name__ == '__main__':
-    keep_alive() # Encender servidor web
-    
+    keep_alive()
     if TELEGRAM_TOKEN:
-        application = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
+        app_bot = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
         
-        # El bot responderá a cualquier texto (excepto comandos)
-        handler_ia = MessageHandler(filters.TEXT & (~filters.COMMAND), chat_con_ia)
-        application.add_handler(handler_ia)
+        # Handler de Texto
+        app_bot.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), chat_con_ia))
         
-        # Comando para limpiar memoria manualmente
-        async def borrar_memoria(update: Update, context: ContextTypes.DEFAULT_TYPE):
-            chats_activos[update.effective_chat.id] = model.start_chat(history=[])
-            await context.bot.send_message(chat_id=update.effective_chat.id, text="🧹 ¡Memoria borrada! Empecemos de nuevo.")
-
-        application.add_handler(handler_ia)
-        print("Bot con Memoria iniciado...")
-        # Manejador para FOTOS
-    application.add_handler(MessageHandler(filters.PHOTO, recibir_imagen))
-        application.run_polling()
-    else:
-        print("¡ERROR! No encontré el Token de Telegram.")
-
-
+        # Handler de Fotos (Ahora acepta fotos solas O fotos con texto)
+        app_bot.add_handler(MessageHandler(filters.PHOTO, recibir_imagen))
+        
+        print("JARVIS ONLINE...")
+        app_bot.run_polling()

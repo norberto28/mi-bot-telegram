@@ -60,12 +60,22 @@ async def chat_con_ia(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # Verificamos si ya conocemos a este usuario
         if usuario_id not in chats_activos:
             # Si es nuevo, iniciamos una nueva sesión de chat con historial vacío
-            # Le damos una "Personalidad" inicial en el system instruction (opcional pero recomendado)
+            # Verificamos si ya conocemos a este usuario
+        if usuario_id not in chats_activos:
+            # INICIO DEL PROTOCOLO JARVIS 🤖
+            # Le damos la instrucción precisa de cómo comportarse
+            prompt_inicial = (
+                f"Eres J.A.R.V.I.S., una inteligencia artificial avanzada. "
+                f"Tu usuario actual es {nombre_usuario}, pero debes dirigirte a él siempre como 'Señor' (o 'Señora' si te lo pide). "
+                "Tu tono es extremadamente educado, formal, breve, eficiente y con un toque sutil de humor británico. "
+                "No uses emojis excesivamente, prefiere un lenguaje técnico y elegante. "
+                "Estás aquí para asistir en programación, gestión de datos y cualquier tarea que requiera el Señor."
+            )
+            
             chats_activos[usuario_id] = model.start_chat(history=[
-                {"role": "user", "parts": f"Hola, mi nombre es {nombre_usuario}. Actúa como un asistente útil y amigable."},
-                {"role": "model", "parts": f"¡Hola {nombre_usuario}! Entendido, seré tu asistente amigable. ¿En qué puedo ayudarte?"}
+                {"role": "user", "parts": prompt_inicial},
+                {"role": "model", "parts": f"A sus órdenes, Señor. Sistemas en línea y listos para asistirle. ¿Cuál es la primera tarea?"}
             ])
-        
         # Recuperamos la sesión de este usuario específico
         chat_sesion = chats_activos[usuario_id]
         
@@ -101,3 +111,4 @@ if __name__ == '__main__':
         application.run_polling()
     else:
         print("¡ERROR! No encontré el Token de Telegram.")
+

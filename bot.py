@@ -1,196 +1,193 @@
 import logging
 import os
-from telegram import Update
-from telegram.ext import ApplicationBuilder, ContextTypes, MessageHandler, CommandHandler, filters
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ChatPermissions
+from telegram.ext import ApplicationBuilder, ContextTypes, MessageHandler, CommandHandler, CallbackQueryHandler, filters
 import google.generativeai as genai
 from flask import Flask
 from threading import Thread
-import PIL.Image
 
 # ==========================================
-# CONFIGURACIÓN DE TU IMPERIO 👑
+# CONFIGURACIÓN 👑
 # ==========================================
+ADMIN_ID = 1393624932  # <--- TU ID
+GRUPOS_DESTINO = [-4947151665] # <--- TUS GRUPOS
 
-# 1. Pega aquí TU ID PERSONAL (el que te dio @userinfobot)
-# Si no lo pones, nadie podrá mandar anuncios.
-ADMIN_ID = 1393624932
-
-# 2. Lista de grupos donde se enviarán los anuncios.
-# Ejemplo: GRUPOS_DESTINO = [-10012345678, -10098765432]
-# Déjalo vacío [] hasta que uses el comando /id en tus grupos para saber sus números.
-GRUPOS_DESTINO = [-4947151665] 
+# LISTA NEGRA DE PALABRAS (Edítala a tu gusto)
+PALABRAS_PROHIBIDAS = ["estafa", "bitcoin gratis", "tonto", "idiota", "groseria"]
 
 # ==========================================
-# 1. MANTENER VIVO EL BOT (Keep Alive) 💓
+# MANTENER VIVO
 # ==========================================
 app = Flask('')
-
 @app.route('/')
-def home():
-    return "J.A.R.V.I.S. Sistema de Difusión Online"
-
-def run():
-    app.run(host='0.0.0.0', port=8080)
-
-def keep_alive():
-    t = Thread(target=run)
-    t.start()
+def home(): return "J.A.R.V.I.S. Security & Admin Online"
+def run(): app.run(host='0.0.0.0', port=8080)
+def keep_alive(): t = Thread(target=run); t.start()
 
 # ==========================================
-# 2. CONFIGURACIÓN DE CREDENCIALES 🔑
+# API Y CONFIGURACIÓN
 # ==========================================
 TELEGRAM_TOKEN = os.environ.get('TELEGRAM_TOKEN')
 GOOGLE_API_KEY = os.environ.get('GOOGLE_API_KEY')
 
-logging.basicConfig(
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    level=logging.INFO
-)
+logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 
-# Configuración de Gemini
 try:
     if GOOGLE_API_KEY:
         genai.configure(api_key=GOOGLE_API_KEY)
         model = genai.GenerativeModel('gemini-2.0-flash')
-    else:
-        print("¡ADVERTENCIA! Falta la API Key.")
-except Exception as e:
-    print(f"Error Gemini: {e}")
+except: pass
 
-# Memoria del bot
 chats_activos = {}
 
 # ==========================================
-# 3. FUNCIONES DE ADMINISTRADOR (NUEVO) 📢
+# 1. CAPTCHA (BIENVENIDA)
 # ==========================================
-
-# Comando /id -> Te dice el ID del chat actual
-async def obtener_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    chat_id = update.effective_chat.id
-    titulo = update.effective_chat.title or "Chat Privado"
-    
-    msg = f"🆔 **ID de {titulo}:**\n`{chat_id}`\n\n(Copia este número y agrégalo a GRUPOS_DESTINO en tu código)"
-    await context.bot.send_message(chat_id=chat_id, text=msg, parse_mode='Markdown')
-
-# Comando /anuncio -> Envía mensaje a todos los grupos
-async def enviar_anuncio(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    usuario_id = update.effective_user.id
-    
-    # Seguridad: Solo TÚ puedes usar este comando
-    if usuario_id != ADMIN_ID:
-        await context.bot.send_message(update.effective_chat.id, "⛔ Acceso denegado. Protocolo reservado para el Administrador.")
-        return
-
-    # Obtenemos el texto que escribiste después de /anuncio
-    mensaje_a_enviar = " ".join(context.args)
-    
-    if not mensaje_a_enviar:
-        await context.bot.send_message(update.effective_chat.id, "⚠️ Error de sintaxis. Uso correcto: `/anuncio Hola a todos`", parse_mode='Markdown')
-        return
-
-    # Enviamos a la lista
-    enviados = 0
-    errores = 0
-    
-    if not GRUPOS_DESTINO:
-        await context.bot.send_message(update.effective_chat.id, "⚠️ La lista de grupos está vacía. Usa /id en los grupos primero y actualiza el código.")
-        return
-
-    await context.bot.send_message(update.effective_chat.id, "🚀 Iniciando protocolo de difusión...")
-
-    for grupo_id in GRUPOS_DESTINO:
+async def bienvenida_captcha(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    for nuevo in update.message.new_chat_members:
+        if nuevo.id == context.bot.id: continue
         try:
-            await context.bot.send_message(chat_id=grupo_id, text=mensaje_a_enviar)
-            enviados += 1
-        except Exception as e:
-            errores += 1
-            print(f"Error enviando a {grupo_id}: {e}")
-
-    await context.bot.send_message(update.effective_chat.id, f"✅ Informe Final: Enviado a {enviados} grupos. ({errores} fallos).")
-
-
-# ==========================================
-# 4. CEREBRO DE JARVIS (TEXTO Y MEMORIA) 🧠
-# ==========================================
-async def chat_con_ia(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    usuario_id = update.effective_chat.id
-    mensaje_usuario = update.message.text
-    nombre_usuario = update.effective_user.first_name
-    
-    await context.bot.send_chat_action(chat_id=usuario_id, action='typing')
-
-    try:
-        # Si no hay memoria, creamos la personalidad de Jarvis
-        if usuario_id not in chats_activos:
-            prompt_inicial = (
-                f"Eres J.A.R.V.I.S., una IA avanzada. Tu usuario actual es {nombre_usuario} (Señor/a). "
-                "Tu tono es servicial, técnico, elegante y con un toque de humor británico sutil. "
-                "Eres experto en tecnología, análisis y asistencia personal."
+            # Silenciar
+            await context.bot.restrict_chat_member(
+                update.effective_chat.id, nuevo.id,
+                ChatPermissions(can_send_messages=False)
             )
-            chats_activos[usuario_id] = model.start_chat(history=[
-                {"role": "user", "parts": prompt_inicial},
-                {"role": "model", "parts": "A sus órdenes, Señor. Sistemas en línea y listos."}
-            ])
-        
-        chat_sesion = chats_activos[usuario_id]
-        response = chat_sesion.send_message(mensaje_usuario)
-        await context.bot.send_message(chat_id=usuario_id, text=response.text)
+            # Botón
+            kb = [[InlineKeyboardButton("🤖 Verificar Humano", callback_data=f"verify_{nuevo.id}")]]
+            await context.bot.send_message(
+                update.effective_chat.id,
+                f"Hola {nuevo.first_name}. Pulsa el botón para hablar.",
+                reply_markup=InlineKeyboardMarkup(kb)
+            )
+        except: pass
 
-    except Exception as e:
-        chats_activos[usuario_id] = model.start_chat(history=[])
-        await context.bot.send_message(chat_id=usuario_id, text="⚠️ Error en procesadores de memoria. Reiniciando sesión, señor.")
-        print(e)
-
-# ==========================================
-# 5. OJOS DE JARVIS (VISIÓN) 👁️
-# ==========================================
-async def recibir_imagen(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    usuario_id = update.effective_chat.id
-    await context.bot.send_chat_action(chat_id=usuario_id, action='typing')
+async def verificar_usuario(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    q = update.callback_query
+    await q.answer()
+    uid = int(q.data.split("_")[1])
+    if q.from_user.id != uid: return
     
+    # Liberar
     try:
-        # Descargar foto
-        foto_archivo = await update.message.photo[-1].get_file()
-        await foto_archivo.download_to_drive("imagen_temp.jpg")
-        
-        # Texto que acompaña la foto (si hay)
-        texto_usuario = update.message.caption if update.message.caption else "Analice esta imagen visual y descríbala detalladamente."
-
-        # Cargar imagen con Pillow
-        img = PIL.Image.open("imagen_temp.jpg")
-        
-        # Asegurar que existe sesión de memoria
-        if usuario_id not in chats_activos:
-             chats_activos[usuario_id] = model.start_chat(history=[])
-        
-        # Enviar a Gemini (Imagen + Texto)
-        chat_sesion = chats_activos[usuario_id]
-        response = chat_sesion.send_message([texto_usuario, img])
-        
-        await context.bot.send_message(chat_id=usuario_id, text=response.text)
-        
-    except Exception as e:
-        await context.bot.send_message(chat_id=usuario_id, text="⚠️ Fallo en los sensores visuales, señor.")
-        print(f"Error imagen: {e}")
+        await context.bot.restrict_chat_member(
+            update.effective_chat.id, uid,
+            ChatPermissions(True, True, True, True)
+        )
+        await q.message.delete()
+        await context.bot.send_message(update.effective_chat.id, f"✅ Acceso concedido, {q.from_user.first_name}.")
+    except: pass
 
 # ==========================================
-# 6. ARRANQUE DEL SISTEMA 🚀
+# 2. IA Y FILTRO DE GROSERÍAS (MODIFICADO)
+# ==========================================
+async def procesar_texto(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    msg = update.message.text
+    uid = update.effective_chat.id
+    tipo = update.effective_chat.type
+    user = update.effective_user
+
+    # A. FILTRO DE GROSERÍAS (Solo en grupos)
+    if tipo != 'private':
+        # Revisamos si hay palabras malas
+        if any(palabra in msg.lower() for palabra in PALABRAS_PROHIBIDAS):
+            try:
+                # 1. Borrar mensaje
+                await update.message.delete()
+                # 2. Advertencia
+                alerta = await context.bot.send_message(uid, f"⚠️ {user.first_name}, modera tu lenguaje. Mensaje eliminado.")
+                # (Opcional: borrar la alerta a los 10 seg para no ensuciar)
+                return 
+            except Exception as e:
+                print(f"No pude borrar mensaje (¿Soy admin?): {e}")
+
+    # B. INTELIGENCIA ARTIFICIAL
+    # En grupos solo responde si lo llaman
+    responder = True
+    if tipo != 'private':
+        bot_name = context.bot.username.lower()
+        es_reply = update.message.reply_to_message and update.message.reply_to_message.from_user.id == context.bot.id
+        if not ("jarvis" in msg.lower() or f"@{bot_name}" in msg.lower() or es_reply):
+            responder = False
+
+    if responder:
+        await context.bot.send_chat_action(uid, 'typing')
+        try:
+            if uid not in chats_activos:
+                chats_activos[uid] = model.start_chat(history=[{"role":"user","parts":"Eres J.A.R.V.I.S."},{"role":"model","parts":"Si señor."}])
+            resp = chats_activos[uid].send_message(msg)
+            await context.bot.send_message(uid, resp.text)
+        except:
+             chats_activos[uid] = model.start_chat(history=[])
+
+# ==========================================
+# 3. COMANDOS NUEVOS (ADMIN)
+# ==========================================
+
+# /ban (Respondiendo a un mensaje)
+async def banear_usuario(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # Solo el ADMIN puede usar esto
+    if update.effective_user.id != ADMIN_ID: return
+    
+    # Debe ser respuesta a alguien
+    if not update.message.reply_to_message:
+        await context.bot.send_message(update.effective_chat.id, "⚠️ Responde al mensaje del usuario que quieres banear.")
+        return
+
+    usuario_a_banear = update.message.reply_to_message.from_user.id
+    nombre = update.message.reply_to_message.from_user.first_name
+
+    try:
+        await context.bot.ban_chat_member(update.effective_chat.id, usuario_a_banear)
+        await context.bot.send_message(update.effective_chat.id, f"🚫 {nombre} ha sido eliminado del grupo por orden del Administrador.")
+    except Exception as e:
+        await context.bot.send_message(update.effective_chat.id, f"⚠️ No pude banearlo. ¿Soy admin? Error: {e}")
+
+# /resumen (Respondiendo a un texto largo)
+async def resumir(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not update.message.reply_to_message: return
+    
+    texto_largo = update.message.reply_to_message.text
+    if not texto_largo: return
+
+    await context.bot.send_chat_action(update.effective_chat.id, 'typing')
+    try:
+        prompt = f"Resume el siguiente texto en 2 frases clave: {texto_largo}"
+        chat = model.start_chat(history=[])
+        resp = chat.send_message(prompt)
+        await context.bot.send_message(update.effective_chat.id, f"📝 **Resumen:**\n{resp.text}", parse_mode='Markdown')
+    except: pass
+
+# Comandos de utilidad anteriores
+async def obtener_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await context.bot.send_message(chat_id=update.effective_chat.id, text=f"🆔 ID: `{update.effective_chat.id}`", parse_mode='Markdown')
+
+async def enviar_anuncio(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_user.id != ADMIN_ID: return
+    msg = " ".join(context.args)
+    for g in GRUPOS_DESTINO:
+        try: await context.bot.send_message(g, msg)
+        except: pass
+    await context.bot.send_message(update.effective_chat.id, "✅ Anuncio enviado.")
+
+# ==========================================
+# ARRANQUE
 # ==========================================
 if __name__ == '__main__':
-    keep_alive() # Inicia el servidor web falso
-    
+    keep_alive()
     if TELEGRAM_TOKEN:
         app_bot = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
         
-        # --- ZONA DE COMANDOS ---
+        # Comandos
         app_bot.add_handler(CommandHandler("id", obtener_id))
         app_bot.add_handler(CommandHandler("anuncio", enviar_anuncio))
+        app_bot.add_handler(CommandHandler("ban", banear_usuario)) # Nuevo
+        app_bot.add_handler(CommandHandler("resumen", resumir))     # Nuevo
         
-        # --- ZONA DE INTERACCIÓN (TEXTO Y FOTOS) ---
-        app_bot.add_handler(MessageHandler(filters.PHOTO, recibir_imagen))
-        app_bot.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), chat_con_ia))
+        # Eventos
+        app_bot.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, bienvenida_captcha))
+        app_bot.add_handler(CallbackQueryHandler(verificar_usuario))
         
-        print("SISTEMA J.A.R.V.I.S. EN LÍNEA...")
+        # Texto e IA (Aquí va el filtro de groserías)
+        app_bot.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), procesar_texto))
+        
         app_bot.run_polling()
-    else:
-        print("¡ERROR CRÍTICO! No se detectó el Token de Telegram.")
